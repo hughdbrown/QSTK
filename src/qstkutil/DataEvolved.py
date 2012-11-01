@@ -29,7 +29,7 @@ class DriverInterface(object):
     DriverInterface is the data access interface that all driver classes must adhear to.
     '''
     def get_data(self, ts_list, symbol_list, data_item, verbose=False,
-                    include_delisted=False):
+                 include_delisted=False):
         raise NotImplementedError("Selected Driver has not implmented get_data.")
 
     def get_all_symbols(self):
@@ -48,27 +48,25 @@ class _SQLite(DriverInterface):
     """
 
     def __init__(self):
-
         try:
             self.sqldbfile = os.environ['QSDB']
         except KeyError:
             raise RuntimeError("Database environment variable not set.")
-
         self._connect()
 
     def _connect(self):
-        self.connection = sqlite3.connect(self.sqldbfile,
-                            detect_types=sqlite3.PARSE_DECLTYPES)
+        self.connection = sqlite3.connect(self.sqldbfile, detect_types=sqlite3.PARSE_DECLTYPES)
         self.cursor = self.connection.cursor()
 
     def get_data(self, ts_list, symbol_list, data_item,
-                    verbose=False, include_delisted=False):
+                 verbose=False, include_delisted=False):
         if _ScratchCache.try_cache:
             return _ScratchCache.try_cache(ts_list, symbol_list, data_item,
-                        verbose, include_delisted, self.get_data_hard_read, "SQLite")
+                                           verbose, include_delisted,
+                                           self.get_data_hard_read, "SQLite")
         else:
             return self.get_data_hard_read(ts_list, symbol_list, data_item,
-                        verbose, include_delisted)
+                                           verbose, include_delisted)
 
     def get_data_hard_read(self, ts_list, symbol_list, data_item, verbose=False, include_delisted=False):
         """
@@ -89,25 +87,22 @@ class _SQLite(DriverInterface):
         assert isinstance(data_item, list)
 
         # Combine Symbols List for Query
-        symbol_query_list = ",".join(map(lambda x: "'" + x + "'", symbol_list))
+        symbol_query_list = ",".join(["'%s'" % x for x in symbol_list])
 
         # Combine Data Fields for Query
-        data_item = map(lambda x: "B." + x, data_item)
-        query_select_items = ",".join(data_item)
-        
-        self.cursor.execute("""
-        select A.code as symbol, B.date,"""+ query_select_items + 
-        """ from price B, asset A where A.assetid = B.assetid and 
-        B.date >= (?) and B.date <= (?) 
-        and A.code in (%s);""" % symbol_query_list, (ts_list[0], ts_list[-1],))
+        query_select_items = ",".join(["B.%s" % x for x in data_item])
+
+        self.cursor.execute("select A.code as symbol, B.date," + query_select_items +
+                            """ from price B, asset A where A.assetid = B.assetid and
+                            B.date >= (?) and B.date <= (?)
+                            and A.code in (%s);""" % symbol_query_list, (ts_list[0], ts_list[-1],))
 
         # Retrieve Results
         results = self.cursor.fetchall()
-        if len(results) == 0:
+        if not results:
             for current_column in range(len(data_item)):
-                columns.append( pandas.DataFrame(columns=symbol_list) )
+                columns.append(pandas.DataFrame(columns=symbol_list))
                 return columns
-
 
         # Remove all rows that were not asked for
         for i, row in enumerate(results):
@@ -121,8 +116,8 @@ class _SQLite(DriverInterface):
             for symbol, ranges in symbol_ranges.items():
                 current_symbol_data = results[ranges[0]:ranges[1] + 1]
                 current_dict[symbol] = pandas.Series(
-                                        map(itemgetter(current_column + 2), current_symbol_data),
-                                        index=map(itemgetter(1), current_symbol_data))
+                    map(itemgetter(current_column + 2), current_symbol_data),
+                    index=map(itemgetter(1), current_symbol_data))
             # Make DataFrame
             columns.append(pandas.DataFrame(current_dict, columns=symbol_list))
             current_dict = {}
@@ -156,7 +151,7 @@ class _SQLite(DriverInterface):
                 symbol_dict[current_symbol] = (start, i - 1)
                 start = i
                 current_symbol = row[0]
-        
+
         #handle last symbol
         symbol_dict[current_symbol] = (start, i)
 
@@ -170,28 +165,25 @@ class _MySQL(DriverInterface):
 
     def __init__(self):
         self._connect()
-    
+
     def __del__(self):
         self.db.close()
-            
+
     def _connect(self):
         s_filepath = os.path.dirname(os.path.abspath(__file__))
         # Read password from a file (does not support whitespace)
-        s_pass = open(os.path.join(s_filepath,'pass.txt')).read().rstrip()
-        
+        s_pass = open(os.path.join(s_filepath, 'pass.txt')).read().rstrip()
 
         self.db = MySQLdb.connect("localhost", "finance", s_pass, "premiumdata")
 
         self.cursor = self.db.cursor()
 
     def get_data(self, ts_list, symbol_list, data_item,
-                    verbose=False, include_delisted=False):
+                 verbose=False, include_delisted=False):
         if _ScratchCache.try_cache:
-            return _ScratchCache.try_cache(ts_list, symbol_list, data_item,
-                        verbose, include_delisted, self.get_data_hard_read, "MySQL")
+            return _ScratchCache.try_cache(ts_list, symbol_list, data_item, verbose, include_delisted, self.get_data_hard_read, "MySQL")
         else:
-            return self.get_data_hard_read(ts_list, symbol_list, data_item,
-                        verbose, include_delisted)
+            return self.get_data_hard_read(ts_list, symbol_list, data_item, verbose, include_delisted)
 
     def get_data_hard_read(self, ts_list, symbol_list, data_item, verbose=False, include_delisted=False):
         """
@@ -212,19 +204,20 @@ class _MySQL(DriverInterface):
         assert isinstance(data_item, list)
 
         # Map to new database schema to preserve legacy code
-        ds_map = {'open':'tropen',
-                  'high':'trhigh',
-                  'low':'trlow',
-                  'close':'trclose',
-                  'actual_close':'close',
-                  'volume':'volume',
-                  'adjusted_close':'adjclose'}
-        
+        ds_map = {
+            'open': 'tropen',
+            'high': 'trhigh',
+            'low': 'trlow',
+            'close': 'trclose',
+            'actual_close': 'close',
+            'volume': 'volume',
+            'adjusted_close': 'adjclose'
+        }
+
         for i in range(1, 101):
             ds_map['f%i' % i] = 'f%i' % i
 
         data_item = map(lambda(x): ds_map[x], data_item)
-
 
         # Combine Symbols List for Query
         symbol_query_list = ",".join(map(lambda x: "'" + x + "'", symbol_list))
@@ -235,14 +228,13 @@ class _MySQL(DriverInterface):
 
         self.cursor.execute("""
         select A.code as symbol, B.date,""" + query_select_items + """
-        from priceadj B, asset A where A.assetid = B.assetid and 
+        from priceadj B, asset A where A.assetid = B.assetid and
         B.date >= %s and B.date <= %s and A.code in (
-        """ + symbol_query_list + """)""", (ts_list[0].replace(hour=0),
-                                             ts_list[-1],))
+        """ + symbol_query_list + """)""", (ts_list[0].replace(hour=0), ts_list[-1],))
 
         # Retrieve Results
         results = self.cursor.fetchall()
-        
+
         # Create Data frames
         for i in range(len(data_item)):
             columns.append(pandas.DataFrame(index=ts_list, columns=symbol_list))
@@ -256,9 +248,8 @@ class _MySQL(DriverInterface):
             # Add all columns to respective data-frames
             for i in range(len(data_item)):
                 columns[i][row[0]][dt_date] = row[i + 2]
-        
+
         return columns
-  
 
     def get_dividends(self, ts_list, symbol_list):
         """
@@ -268,92 +259,85 @@ class _MySQL(DriverInterface):
         """
 
         # Combine Symbols List for Query
-        symbol_query_list = ",".join(map(lambda x: "'" + x + "'", symbol_list))
+        symbol_query_list = ",".join(["'%s'" % x for x in symbol_list])
 
         self.cursor.execute("""
         select code, exdate, divamt
-        from dividend B, asset A where A.assetid = B.assetid and 
+        from dividend B, asset A where A.assetid = B.assetid and
         B.exdate >= %s and B.exdate <= %s and A.code in (
-        """ + symbol_query_list + """)""", (ts_list[0].replace(hour=0),
-                                             ts_list[-1],))
-        
+        """ + symbol_query_list + """)""", (ts_list[0].replace(hour=0), ts_list[-1],))
+
         # Retrieve Results
         results = self.cursor.fetchall()
 
         # Remove all rows that were not asked for
         results = list(results)
 
-        if len(results) == 0:
+        if not results:
             return pandas.DataFrame(columns=symbol_list)
-  
+
         # Create Pandas DataFrame in Expected Format
         current_dict = {}
         symbol_ranges = self._find_ranges_of_symbols(results)
         for symbol, ranges in symbol_ranges.items():
             current_symbol_data = results[ranges[0]:ranges[1] + 1]
-        
-            current_dict[symbol] = pandas.Series(map(itemgetter(2), 
-                                                current_symbol_data),
-                 index=map(lambda x: itemgetter(1)(x) + relativedelta(hours=16), 
-                                              current_symbol_data))
 
-                    
+            current_dict[symbol] = pandas.Series(
+                map(itemgetter(2), current_symbol_data),
+                index=map(lambda x: itemgetter(1)(x) + relativedelta(hours=16), current_symbol_data))
+
         # Make DataFrame
         ret = pandas.DataFrame(current_dict, columns=symbol_list)
         return ret.reindex(ts_list)
 
-
     def get_list(self, list_name):
-        
-        if type(list_name) == type('str') or \
-           type(list_name) == type(u'unicode'):
+        if type(list_name) in (str, unicode):
             self.cursor.execute("""select symbol from premiumdata.lists
                                    where name=%s;""", (list_name))
         else:
-            self.cursor.execute("""select myself.code as symbol from 
+            self.cursor.execute("""select myself.code as symbol from
                 indexconstituent consititue1_, asset myself
-                where myself.assetid = consititue1_.assetid and 
-                consititue1_.indexassetid = %s;""", (str(int(list_name))))
+                where myself.assetid = consititue1_.assetid and
+                consititue1_.indexassetid = %d;""", int(list_name))
 
         return sorted([x[0] for x in self.cursor.fetchall()])
 
     def get_all_symbols(self):
         ''' Returns all symbols '''
-        self.cursor.execute('''select distinct code from asset a where  
+        self.cursor.execute('''select distinct code from asset a where
                                a.statuscodeid<100 and a.recordstatus=1''')
         return sorted([x[0] for x in self.cursor.fetchall()])
 
     def get_all_lists(self):
-        
 
         self.cursor.execute("""select asset0_.assetid as id, asset0_.issuername as name
-            from asset asset0_ where exists 
-            (select consititue1_.assetid from indexconstituent consititue1_ 
-            where asset0_.assetid=consititue1_.indexassetid) 
+            from asset asset0_ where exists
+            (select consititue1_.assetid from indexconstituent consititue1_
+            where asset0_.assetid=consititue1_.indexassetid)
             order by asset0_.issuername;""")
         return sorted([x[1] for x in self.cursor.fetchall()])
 
     def get_last_date(self):
         ''' Returns last day of valid data '''
-        self.cursor.execute( ''' select ts from premiumdata.price 
-                p,premiumdata.asset a, (select assetid as id,max(date)
-                as ts from premiumdata.price group by assetid) s
-                where p.assetid = a.assetid and s.id = p.assetid and 
-                p.date = s.ts and a.code='SPY';''')
+        self.cursor.execute(
+            ''' select ts from premiumdata.price
+            p,premiumdata.asset a, (select assetid as id,max(date)
+            as ts from premiumdata.price group by assetid) s
+            where p.assetid = a.assetid and s.id = p.assetid and
+            p.date = s.ts and a.code='SPY';''')
         dt_ret = datetime.datetime.combine(self.cursor.fetchall()[0][0],
                                            datetime.time(16))
         return dt_ret
-    
+
     def get_shares(self, symbol_list):
         ''' Returns list of values corresponding to shares outstanding '''
-        
-        symbol_query_list = ",".join(map(lambda x: "'" + x + "'", symbol_list))
-        self.cursor.execute( ''' SELECT code, sharesoutstanding FROM asset a
-                                 where code in (''' + symbol_query_list + ');' )
+
+        symbol_query_list = ",".join("'%s'" for x in symbol_list)
+        query = 'SELECT code, sharesoutstanding FROM asset a where code in (%s);' % symbol_query_list
+        self.cursor.execute(query)
 
         return dict(self.cursor.fetchall())
-        
-         
+
     def _find_ranges_of_symbols(self, results):
         ''' Finds range of current symbols in results list '''
         symbol_dict = {}
@@ -365,7 +349,7 @@ class _MySQL(DriverInterface):
                 symbol_dict[current_symbol] = (start, i - 1)
                 start = i
                 current_symbol = row[0]
-        
+
         #handle last symbol
         symbol_dict[current_symbol] = (start, i)
 
@@ -375,7 +359,7 @@ class _MySQL(DriverInterface):
 class _ScratchCache(object):
     @staticmethod
     def try_cache(ts_list, symbol_list, data_item, verbose=False,
-                include_delisted=False, cache_miss_function=None, source=None):
+                  include_delisted=False, cache_miss_function=None, source=None):
         '''
         Read data into a DataFrame, but check to see if it is in a cache first.
         @param ts_list: List of timestamps for which the data values are needed. Timestamps must be sorted.
@@ -449,15 +433,14 @@ class _ScratchCache(object):
                     if verbose:
                         print "error reading cache: " + cachefilename
                         print "recovering..."
-        if (readfile != True):
+        if not readfile:
             if verbose:
                 print "cache miss"
                 print "beginning hardread"
                 start = time.time()  # start timer
-                print "data_item(s): " + str(data_item)
-                print "symbols to read: " + str(symbol_list)
-            retval = cache_miss_function(ts_list,
-                symbol_list, data_item, verbose, include_delisted)
+                print "data_item(s): %s" % str(data_item)
+                print "symbols to read: %s" % str(symbol_list)
+            retval = cache_miss_function(ts_list, symbol_list, data_item, verbose, include_delisted)
             if verbose:
                 elapsed = time.time() - start  # end timer
                 print "end hardread"
@@ -470,7 +453,7 @@ class _ScratchCache(object):
                 print "error writing cache: " + cachefilename
             if verbose:
                 print "end saving to cache"
-                print "reading took " + str(elapsed) + " seconds"
+                print "reading took %s seconds" % str(elapsed)
         return retval
 
 
@@ -482,8 +465,7 @@ class DataAccess(object):
 
     def __new__(self, driver):
         if not DataAccess.drivers[driver]:
-            raise NotImplementedError("DataAccess Driver: " + driver +
-                                      " not available or implmented.")
+            raise NotImplementedError("DataAccess Driver: %s not available or implmented." % driver)
         return DataAccess.drivers[driver]()
 
 
@@ -500,8 +482,9 @@ if __name__ == "__main__":
     #print db.get_all_symbols()
 
     print db.get_list('Dow Jones Transportation')
-    
-    print db.get_dividends([date1 + datetime.timedelta(days=x) for x in range(100)],
-                            ["MSFT", "PGF", "GOOG", "A"])
+
+    print db.get_dividends(
+        [date1 + datetime.timedelta(days=x) for x in range(100)],
+        ["MSFT", "PGF", "GOOG", "A"])
 
     print db.get_data([date1, date2], ["AAPL", "IBM", "GOOG", "A"], ["open", "close"])

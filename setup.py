@@ -11,11 +11,18 @@ setup(
     description='Python toolkit for stocks',
     author='Tucker Balch',
     author_email='tucker@cc.gatech.edu',
-    url='http://wiki.quantsoftware.org/','
+    url='http://wiki.quantsoftware.org/',
     install_requires=[
-        'nose',
+        'nose==1.2.1',
+        'numpy==1.6.2',
+        'pandas==0.9.0',
     ],
     tests_require=[
+        'nose==1.2.1',
+        'coverage==3.5.3',
+        'pylint==0.26.0',
+        'pep8==1.3.3',
+        'pyflakes==0.5.0',
     ],
     setup_requires=[],
     packages=find_packages(exclude=['tests']),
