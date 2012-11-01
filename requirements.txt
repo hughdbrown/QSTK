@@ -3,3 +3,5 @@ pandas==0.9.0
 matplotlib==1.1.1
 pytz
 cvxopt
+epydoc==3.0.1
+
