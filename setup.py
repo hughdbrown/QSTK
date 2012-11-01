@@ -12,10 +12,16 @@ setup(
     author='Tucker Balch',
     author_email='tucker@cc.gatech.edu',
     url='http://wiki.quantsoftware.org/',
+    # On ubuntu, you need to install these:
+    #   sudo apt-get install libfreetype6-dev libpng-dev
+    # before you can get matplotlib to build
     install_requires=[
         'nose==1.2.1',
         'numpy==1.6.2',
+        'python-dateutil==2.1',
+        'pytz==2012h',
         'pandas==0.9.0',
+        'matplotlib==1.1.1',
     ],
     tests_require=[
         'nose==1.2.1',
